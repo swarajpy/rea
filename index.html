@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>rea — say it, bill it</title>
+  <meta name="description" content="Say a sale out loud in Marathi, Hindi or English. rea writes the bill and keeps the customer ledger. Works offline.">
+  <meta name="theme-color" content="#14623f">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>rea</h1>
+    <span class="shop" id="shopLabel"></span>
+  </header>
+
+  <div class="notice" id="storageNotice" hidden>
+    Your browser is blocking storage, so nothing will be saved after you close this page. Use a normal (not private) window.
+  </div>
+
+  <main>
+    <!-- RECORD -->
+    <section class="view active" id="view-record" aria-labelledby="tab-record">
+      <div class="say">
+        <button class="mic" id="mic" type="button" aria-label="Start speaking">
+          <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M12 15a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4Zm6-4a1 1 0 1 1 2 0 8 8 0 0 1-7 7.93V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.07A8 8 0 0 1 4 11a1 1 0 1 1 2 0 6 6 0 0 0 12 0Z"/></svg>
+        </button>
+        <div class="say-text">
+          <strong id="micState">Tap and say the sale</strong>
+          <label class="lang">Language
+            <select id="lang">
+              <option value="mr-IN">मराठी</option>
+              <option value="hi-IN">हिन्दी</option>
+              <option value="en-IN">English</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <p class="hint" id="micHint"></p>
+
+      <label class="field">
+        <span>…or type it</span>
+        <textarea id="speech" rows="3" placeholder="Sharma ji took 20 kg onion at 30, paid 400"></textarea>
+      </label>
+      <button class="btn primary wide" id="parseBtn" type="button">Make bill</button>
+
+      <div class="chips" id="examples" aria-label="Examples"></div>
+
+      <div id="review" hidden></div>
+    </section>
+
+    <!-- LEDGER -->
+    <section class="view" id="view-ledger" aria-labelledby="tab-ledger">
+      <div id="ledgerList"></div>
+      <div id="ledgerDetail" hidden></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="view-settings" aria-labelledby="tab-settings">
+      <label class="field">
+        <span>Shop name (printed on every bill)</span>
+        <input id="shopName" type="text" maxlength="60" autocomplete="off">
+      </label>
+
+      <h2>Backup</h2>
+      <p class="hint">Your ledger lives only on this phone. Download a backup now and then — if you clear browser data or lose the phone, it is gone.</p>
+      <div class="row">
+        <button class="btn" id="exportBtn" type="button">Download backup</button>
+        <label class="btn" for="importFile">Restore backup</label>
+        <input id="importFile" type="file" accept="application/json,.json" hidden>
+      </div>
+
+      <h2>About</h2>
+      <p class="hint">
+        Typing works fully offline once the page has loaded once. Voice input uses your browser's speech recognition —
+        in Chrome on Android that is sent to Google and needs internet. Always check the bill before saving; rea
+        shows what it was unsure about.
+      </p>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Sections">
+    <button type="button" class="tab active" data-view="record" id="tab-record">Record</button>
+    <button type="button" class="tab" data-view="ledger" id="tab-ledger">Ledger</button>
+    <button type="button" class="tab" data-view="settings" id="tab-settings">Settings</button>
+  </nav>
+
+  <dialog id="billDialog" aria-label="Bill"></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="parser.js"></script>
+  <script src="store.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
