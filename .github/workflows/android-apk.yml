@@ -1,0 +1,86 @@
+name: Build Android APK
+
+# Builds rea as an installable Android app (APK) with Capacitor.
+# Download it from the "Releases" page (tag apk-latest) or from this run's Artifacts.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Stage the web app
+        run: |
+          rm -rf www
+          mkdir www
+          cp -r index.html app.js parser.js store.js styles.css manifest.webmanifest icons www/
+
+      - name: Create the Android project
+        run: |
+          npx cap add android
+          python3 scripts/patch-android-manifest.py
+
+      - name: Make launcher icons
+        continue-on-error: true
+        run: |
+          mkdir -p assets
+          convert icons/icon-maskable-512.png -resize 1024x1024 assets/icon-only.png
+          convert icons/icon-maskable-512.png -resize 1024x1024 assets/icon-foreground.png
+          convert -size 1024x1024 xc:'#14623f' assets/icon-background.png
+          npx --yes @capacitor/assets@4.0.0 generate --android --assetPath assets
+
+      - name: Sync web files into the Android project
+        run: npx cap sync android
+
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk "rea-build-${{ github.run_number }}.apk"
+
+      - name: Upload as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rea-apk
+          path: rea-build-${{ github.run_number }}.apk
+          retention-days: 90
+
+      - name: Publish to the apk-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest "rea-build-${{ github.run_number }}.apk" \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "rea Android app (latest build)" \
+            --notes "Debug-signed APK built from commit ${{ github.sha }}. On your phone, download it and allow 'install unknown apps' when asked."

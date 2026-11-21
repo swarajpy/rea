@@ -25,6 +25,21 @@ npm test           # 28 tests for the parser and the ledger
 Open it on a phone and use "Add to Home screen" to install it. To publish it free, turn on
 GitHub Pages for this repo (Settings → Pages → Deploy from branch → `main` / root).
 
+## Android app (APK)
+
+Every push to `main` builds an installable Android app with GitHub Actions
+(`.github/workflows/android-apk.yml`). To get it:
+
+1. Open the **Releases** page of this repo and pick **rea Android app (latest build)** (tag `apk-latest`).
+2. Download the `.apk` on your phone and open it. Android will ask to allow "install unknown apps" once.
+
+To rebuild without changing code: **Actions → Build Android APK → Run workflow**. The same file is also kept for 90 days under that run's **Artifacts**.
+
+The app is the same web app wrapped with [Capacitor](https://capacitorjs.com). Inside the app:
+voice uses the phone's own speech recogniser (microphone permission is asked on first use),
+backups open the Android share sheet, and WhatsApp links open in the browser or WhatsApp.
+The Print / PDF button is hidden there. It is a debug-signed build for your own use, not a Play Store release.
+
 ## What it understands
 
 | You say | rea reads |

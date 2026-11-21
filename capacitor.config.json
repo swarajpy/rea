@@ -1,0 +1,8 @@
+{
+  "appId": "com.swarajpy.rea",
+  "appName": "rea",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

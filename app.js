@@ -26,6 +26,26 @@
   /* ---------- tiny helpers ---------- */
   const $ = (id) => document.getElementById(id);
 
+  /* ---------- Android app shell (Capacitor) ----------
+     In the installed Android app the page runs in a WebView. A WebView has no browser
+     speech recognition, no file downloads, no print dialog and no window.open, so those
+     four things go through native plugins there. In a normal browser none of this runs. */
+  const cap = window.Capacitor;
+  const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  const nativePlugins = {};
+  const nativePlugin = (name) => {
+    if (!isNative) return null;
+    if (!nativePlugins[name]) nativePlugins[name] = cap.registerPlugin(name);
+    return nativePlugins[name];
+  };
+  function openExternal(url) {
+    if (isNative) {
+      nativePlugin('Browser').open({ url }).catch(() => toast('Could not open the link.'));
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -257,8 +277,8 @@
         h('div', { class: 'thanks' }, 'Thank you!')
       ),
       h('div', { class: 'dialog-actions' },
-        h('button', { class: 'btn primary', type: 'button', onclick: () => window.open('https://wa.me/?text=' + encodeURIComponent(billText(entry)), '_blank', 'noopener') }, 'WhatsApp'),
-        h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print / PDF'),
+        h('button', { class: 'btn primary', type: 'button', onclick: () => openExternal('https://wa.me/?text=' + encodeURIComponent(billText(entry))) }, 'WhatsApp'),
+        isNative ? null : h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print / PDF'),
         h('button', { class: 'btn', type: 'button', onclick: () => dlg.close() }, 'Close')
       )
     );
@@ -313,7 +333,7 @@
     const remind = () => {
       const shop = store.settings().shop || 'our shop';
       const text = `Namaste ${name}, a gentle reminder from ${shop}: your balance is ${money(bal)}. Please pay when you can. Thank you!`;
-      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+      openExternal('https://wa.me/?text=' + encodeURIComponent(text));
     };
 
     detail.replaceChildren(
@@ -366,10 +386,21 @@
   $('shopName').addEventListener('input', (e) => { store.setSettings({ shop: e.target.value }); paintShop(); });
   $('lang').addEventListener('change', (e) => store.setSettings({ lang: e.target.value }));
 
-  $('exportBtn').addEventListener('click', () => {
+  $('exportBtn').addEventListener('click', async () => {
+    const fileName = `rea-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    if (isNative) {
+      // A WebView cannot download a blob, so write the file and open the Android share sheet.
+      try {
+        const saved = await nativePlugin('Filesystem').writeFile({ path: fileName, data: store.exportJSON(), directory: 'CACHE', encoding: 'utf8' });
+        await nativePlugin('Share').share({ title: 'rea backup', files: [saved.uri] });
+      } catch (err) {
+        if (!/cancel/i.test(String((err && err.message) || err))) toast('Could not share the backup.');
+      }
+      return;
+    }
     const blob = new Blob([store.exportJSON()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = h('a', { href: url, download: `rea-backup-${new Date().toISOString().slice(0, 10)}.json` });
+    const a = h('a', { href: url, download: fileName });
     document.body.append(a);
     a.click();
     a.remove();
@@ -388,7 +419,57 @@
   if (!storage.persistent) $('storageNotice').hidden = false;
 
   /* ---------- voice ---------- */
+  function setupNativeVoice() {
+    // Android app: use the phone's own speech recogniser through a Capacitor plugin.
+    const Speech = nativePlugin('SpeechRecognition');
+    const mic = $('mic');
+    let listening = false;
+    let safety = null;
+
+    const setUi = (on) => {
+      listening = on;
+      mic.classList.toggle('listening', on);
+      mic.setAttribute('aria-label', on ? 'Stop listening' : 'Start speaking');
+      $('micState').textContent = on ? 'Listening… tap to stop' : 'Tap and say the sale';
+      clearTimeout(safety);
+      if (on) safety = setTimeout(() => { Speech.stop().catch(() => {}); }, 25000);
+    };
+    const finish = () => {
+      if (!listening) return;
+      setUi(false);
+      if ($('speech').value.trim()) parseNow();
+    };
+
+    Speech.addListener('partialResults', (data) => {
+      if (data && data.matches && data.matches.length) $('speech').value = String(data.matches[0]).trim();
+    });
+    Speech.addListener('listeningState', (data) => {
+      if (data && data.status === 'stopped') finish();
+    });
+
+    mic.addEventListener('click', async () => {
+      if (listening) {
+        try { await Speech.stop(); } catch (err) { /* already stopped */ }
+        finish();
+        return;
+      }
+      try {
+        const avail = await Speech.available();
+        if (!avail.available) { toast('This phone has no speech recognition. You can type the sale.'); return; }
+        let perm = await Speech.checkPermissions();
+        if (perm.speechRecognition !== 'granted') perm = await Speech.requestPermissions();
+        if (perm.speechRecognition !== 'granted') { toast('Microphone is blocked. Allow it in Android settings.'); return; }
+        setUi(true);
+        await Speech.start({ language: $('lang').value, maxResults: 1, partialResults: true, popup: false });
+      } catch (err) {
+        setUi(false);
+        toast('Could not start the microphone. You can type the sale.');
+      }
+    });
+  }
+
   (function setupVoice() {
+    if (isNative) { setupNativeVoice(); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const mic = $('mic');
     if (!SR) {
@@ -437,7 +518,7 @@
   })();
 
   /* ---------- offline support ---------- */
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  if (!isNative && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
 })();
